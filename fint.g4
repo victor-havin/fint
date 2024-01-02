@@ -122,3 +122,7 @@ RPAREN
 WS
     : [\r\n\t ]+ -> skip
     ;
+
+COMMENT
+    : '#' ~('\r'|'\n')* -> skip
+    ;
