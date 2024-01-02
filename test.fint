@@ -9,7 +9,7 @@ d = c^2^2;      # Power to power
 pi = 3.1415926; # Constant
 r  = 2;         # Constant
 s  = pi*r^2;    # expression
-sci = 2.5E-6;   $ Scientific notation
+sci = 2.5E-6;   # Scientific notation
 # Long expression
 x = 1+1/2+1/3+1/4+1/5+1/6+1/7+1/8+1/9+1/10+1/11+1/12; 
 # Should be 1
