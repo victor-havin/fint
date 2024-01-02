@@ -4,6 +4,7 @@
 // Implementation of FINT grammar (a simple formula interpreter).
 //
 // 1/1/2024
+// Github: victor-havin/fint
 //==============================================================================
 
 #include <iostream>
