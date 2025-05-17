@@ -8,9 +8,9 @@
 //==============================================================================
 
 #include <iostream>
-#include <iomanip>
 #include <map>
 #include <cmath>
+#include <iomanip> // Required for std::setprecision
 #include "fintLexer.h"
 #include "fintParser.h"
 #include "fintVisitor.h"
@@ -40,7 +40,7 @@ private:
   
   
   template <typename T, typename... P> void reportError(T * ctx, P... param) {
-    std::cout << "line " << ctx->getStart()->getLine() <<  ":" 
+    std::cerr << "line " << ctx->getStart()->getLine() << ":"
               << ctx->getStart()->getCharPositionInLine() << " ";
     reportErrorItem(param...);
   }
@@ -67,7 +67,9 @@ public:
   // Operation visitor
   virtual std::any visitOperation(fintParser::OperationContext *ctx) override {
     std::string name = std::any_cast<std::string>(visit(ctx->variable()));
-    double value = std::any_cast<double>(visit(ctx->expression()));
+    double value = ctx->expression() ?
+      std::any_cast<double>(visit(ctx->expression())):
+      0;
     vars_t::iterator itr = vars.find(name);
     if(itr == vars.end()) {
       vars.insert(std::pair(name, value));
@@ -81,6 +83,10 @@ public:
   // Variable visitor
   virtual std::any visitVariable(fintParser::VariableContext *ctx) override {
     std::string name = ctx->getText();
+    if (!std::isalpha(name[0]) && name[0] != '_') {
+        reportError(ctx, "Invalid variable name: ", name, ". Variable names must start with a letter or underscore.");
+        return std::nan("");
+    }
     return name;
   }
 
@@ -126,11 +132,10 @@ public:
   // Satom (signed atom) visitor
   virtual std::any visitSatom(fintParser::SatomContext *ctx) override {
     double value = 0;
-    if(ctx->MINUS() && ctx->atom()) {
+    if (ctx->MINUS() && ctx->atom()) {
         value = -std::any_cast<double>(visit(ctx->atom()));
-    }
-    else if(ctx->PLUS()) {
-        value = -std::any_cast<double>(visit(ctx->atom()));
+    } else if (ctx->PLUS() && ctx->atom()) {
+        value = std::any_cast<double>(visit(ctx->atom())); // Do not negate
     }
     else if (ctx->atom()) {
       value = std::any_cast<double>(visit(ctx->atom()));
@@ -145,7 +150,7 @@ public:
         value = std::any_cast<double>(visit(ctx->expression()));
     }
     else if (ctx->float_()) {
-        value = std::stod(ctx->getText());
+        value = std::stod(ctx->float_()->getText());
     }
     else if (ctx->variable()) {
       std::string name = ctx->variable()->getText();
@@ -164,59 +169,66 @@ public:
   }
 
   // Function visitor
-  virtual std::any visitFunction(fintParser::FunctionContext *ctx) {
+  virtual std::any visitFunction(fintParser::FunctionContext *ctx) override {
     double value = 0;
     std::string fname = ctx->VARIABLE()->getText();
+
+    // Check for trailing commas
+    if (ctx->expression().size() == 0 ) {
+        reportError(ctx, "Invalid function: ", fname);
+        return std::nan("");
+    }
+    // Check for trailing commas
+    else if (ctx->expression().size() > 0) {
+      antlr4::Token *lastToken = ctx->expression().back()->getStop();
+      if (lastToken && lastToken->getText() == ",") {
+          reportError(ctx, "Trailing commas are not allowed in function calls: ", fname);
+          return std::nan("");
+      }
+    }
+  
+
     double arg0 = std::any_cast<double>(visit(ctx->expression(0)));
-    if(fname == "sin") {
-      value = sin(arg0);
-    }
-    else if(fname == "asin") {
-      value = asin(arg0);
-    }
-    else if(fname == "cos") {
-      value = cos(arg0);
-    }
-    else if(fname == "acos") {
-      value = acos(arg0);
-    }
-    else if(fname == "tan") {
-      value = tan(arg0);
-    }
-    else if(fname == "atan") {
-      value = atan(arg0);
-    }
-    else if(fname == "ln") {
-      value = log(arg0);
-    }
-    else if(fname == "pow"){
-      if(ctx->expression().size() != 2) {
-        std::cout << "Invalid function args." << std::endl;
-      }
-      else {
-        double arg1 = std::any_cast<double>(visit(ctx->expression(1)));
-        value = pow(arg0, arg1);
-      }
-    }
-    else if(fname == "log") {
-      if(ctx->expression().size() != 2) {
-        reportError(ctx, "Invalid function args.");
-      }
-      else {
-        double arg1 = std::any_cast<double>(visit(ctx->expression(1)));
-        value = log(arg0)/log(arg1);
-      }
-    }
-    else {
-      reportError(ctx, "Invalid function ", fname);
+    if (fname == "sin") {
+        value = sin(arg0);
+    } else if (fname == "asin") {
+        value = asin(arg0);
+    } else if (fname == "cos") {
+        value = cos(arg0);
+    } else if (fname == "acos") {
+        value = acos(arg0);
+    } else if (fname == "tan") {
+        value = tan(arg0);
+    } else if (fname == "atan") {
+        value = atan(arg0);
+    } else if (fname == "ln") {
+        value = log(arg0);
+    } else if (fname == "pow") {
+        if (ctx->expression().size() != 2) {
+            reportError(ctx, "Invalid number of arguments for function ", fname);
+            return std::nan(""); // Return NaN for invalid function calls
+        } else {
+            double arg1 = std::any_cast<double>(visit(ctx->expression(1)));
+            value = pow(arg0, arg1);
+        }
+    } else if (fname == "log") {
+        if (ctx->expression().size() != 2) {
+            reportError(ctx, "Invalid function args.");
+        } else {
+            double arg1 = std::any_cast<double>(visit(ctx->expression(1)));
+            value = log(arg0) / log(arg1);
+        }
+    } else {
+        reportError(ctx, "Invalid function ", fname);
     }
     return value;
   }
 
-  // Float visitor
-  virtual std::any visitFloat(fintParser::FloatContext *ctx) override {
-    return visitChildren(ctx);
-  }
+// Float visitor
+virtual std::any visitFloat_(fintParser::Float_Context *ctx) override {
+    // Simply return the value of the float as a double
+    return std::stod(ctx->getText());
+}
 
 };
 
@@ -237,16 +249,17 @@ int main(int argc, char * argv[])
   // Process command line
   for(int arg = 1; arg < argc; arg++) {
     std::string str = argv[arg];
-    if(str == "-f" && arg+1 < argc) {
-      fs.open(argv[++arg]);
-      if(fs.is_open()) {
-        input = new ANTLRInputStream(fs);
-      }
-      else {
-        std::cout << "File error:" << argv[arg] << std::endl;
+    if(str == "-f" && arg + 1 < argc) {
+    fs.open(argv[++arg]);
+    if (!fs.is_open()) {
+        std::cerr << "Error: Unable to open file " << argv[arg] << std::endl;
         return 2;
-      }
     }
+    } else if (str == "-f") {
+      std::cerr << "Error: Missing file name after -f" << std::endl;
+      return 2;
+    }
+    input = new ANTLRInputStream(fs);
   }
   // No file? Use command.
   if(input == NULL){
@@ -285,7 +298,13 @@ int main(int argc, char * argv[])
   }
 
   // Cleanup
-  delete input;
+  if (fs.is_open()) {
+    fs.close();
+  }
+  if (input) {
+    delete input;
+  }
+  // Return success
   return 0;
 }
 

@@ -16,6 +16,7 @@ program
 
 operation
     : variable ASSIGNMENT expression SEMICOLON
+    | variable ASSIGNMENT SEMICOLON // Allow empty assignments
     ;
 
 variable
@@ -23,7 +24,7 @@ variable
     ;
 
 expression
-    :  term ( (PLUS | MINUS) term )*
+    : term ( (PLUS | MINUS) term )*
     ;
 
 term
@@ -41,23 +42,23 @@ satom
     ;
 
 atom    
-    : float
+    : float_ // Renamed from `float`
     | variable
     | function
     | LPAREN expression RPAREN
     ;
 
 function
-    : VARIABLE LPAREN expression (',' expression)* RPAREN 
+    : VARIABLE LPAREN (expression (',' expression)*)? RPAREN // Disallow trailing commas
     ;
 
-float
+float_ // Renamed from `float`
     : DECIMAL
     | SCIENTIFIC
     ;
 
 DECIMAL
-    : NUM+ ('.' NUM +)? 
+    : NUM+ ('.' NUM+)? 
     ;
 
 SCIENTIFIC
